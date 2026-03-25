@@ -1,3 +1,8 @@
+## v2.0.1
+- Fixed critical bug where changing Team Side or Faction from the phone view would clear the API URL for all overlays
+- Hub no longer shows NO SIGNAL on a single failed config fetch — requires 3 consecutive failures before flagging offline
+- Server config read/write is now atomic — prevents partial file reads during simultaneous saves causing temporary signal loss
+
 ## v2.0
 - Complete hub overhaul — new layout, new numbering system, cleaner design
 - OBS Browser Sources now shows dimensions per overlay (e.g. 1920 × 1080)
