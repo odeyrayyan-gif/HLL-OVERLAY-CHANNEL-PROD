@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>HLL HQ Command Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: rgba(12, 14, 18, 0.88); 
+            --allies: #00a2ff;
+            --axis: #ff3c00;
+            --accent: #ac2e2e;
+            --border: 1px solid rgba(255,255,255,0.1);
+            --panel-width: 500px; 
+            --panel-height: 585px;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            width: 1920px; height: 1080px;
+            background: transparent;
+            font-family: 'Oswald', sans-serif;
+            color: #eee;
+            overflow: hidden;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 40px;
+        }
+        .panel {
+            width: var(--panel-width);
+            height: var(--panel-height);
+            background: var(--bg);
+            backdrop-filter: blur(15px);
+            border: var(--border);
+            display: flex;
+            flex-direction: column;
+            border-radius: 4px;
+        }
+        .left-side { border-left: 5px solid var(--accent); }
+        .right-side { border-right: 5px solid var(--accent); }
+        
+        .header { padding: 12px; background: rgba(255,255,255,0.03); border-bottom: var(--border); text-align: center; }
+        
+        /* Increased spacing for the KillDiff Header */
+        .header-title { 
+            font-size: 18px; 
+            text-transform: uppercase; 
+            font-weight: 700; 
+            display: flex; 
+            justify-content: center; 
+            gap: 40px; /* Further spacing between items */
+            align-items: center; 
+        }
+        
+        .team-label { letter-spacing: 4px; } /* Wider spacing for Faction names */
+        .kd-label { letter-spacing: 2px; }
+
+        .content { padding: 8px 20px; flex-grow: 1; display: flex; flex-direction: column; justify-content: flex-start; }
+
+        .k-row {
+            display: grid;
+            grid-template-columns: 30px 1fr 65px 65px 65px;
+            align-items: center;
+            padding: 7px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            gap: 10px;
+        }
+        .k-row:last-child { border-bottom: none; }
+        .k-rank { color: rgba(255,255,255,0.2); font-size: 13px; font-weight: 700; }
+        .k-name { font-size: 16px; text-transform: uppercase; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        
+        .color-left { color: var(--allies); text-shadow: 0 0 8px rgba(0, 162, 255, 0.3); }
+        .color-right { color: var(--axis); text-shadow: 0 0 8px rgba(255, 60, 0, 0.3); }
+
+        .stat-box { text-align: center; }
+        .stat-val { font-size: 18px; font-weight: 700; color: #fff; line-height: 1; }
+        .stat-label { font-size: 8px; color: var(--accent); text-transform: uppercase; margin-top: 2px; font-weight: 700; }
+
+        .s-row { margin-bottom: 15px; }
+        .s-info { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 3px; }
+        .s-label { font-size: 12px; text-transform: uppercase; color: rgba(255,255,255,0.5); letter-spacing: 1.5px; }
+        .s-val { font-weight: 700; font-size: 18px; }
+
+        .bar-container { height: 10px; background: rgba(0,0,0,0.3); border-radius: 1px; overflow: hidden; display: flex; }
+        .bar { height: 100%; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); }
+        .bar-left-blue { background: var(--allies); }
+        .bar-right-red { background: var(--axis); }
+
+        .footer { font-size: 10px; text-align: center; padding: 8px; color: #ff9d00; text-transform: uppercase; font-weight: 700; border-top: 1px solid rgba(255,255,255,0.03); }
+    </style>
+</head>
+<body>
+    <div class="panel left-side">
+        <div class="header"><div class="header-title" style="color:var(--accent); letter-spacing: 4px;">TOP 10 INFANTRY</div></div>
+        <div id="killers-list" class="content"></div>
+        <div class="footer">COMMAND FEED</div>
+    </div>
+    <div class="panel right-side">
+        <div class="header">
+            <div id="dynamic-header" class="header-title">
+                </div>
+        </div>
+        <div id="teams-list" class="content"></div>
+        <div class="footer" id="status-text">SIGNAL SECURE</div>
+    </div>
+
+<script>
+    const CONFIG_URL = "http://localhost:3000/config";
+    const AXIS_SIGS = ["kar98", "mp40", "mg34", "mg42", "stg44", "fg42", "gewehr", "zf41", "p38", "luger", "walther", "stielhandgranate", "tiger", "panzer", "panther", "puma", "lux", "luchs", "marder", "sd.kfz", "lefh", "sfh", "150mm", "pak40", "panzerfaust", "brumm", "stuh", "strumpanzer"];
+
+    const CAT_MAP = {
+        infantry: ["garand", "thompson", "carbine", "springfield", "m1911", "grease", "sten", "enfield", "mosin", "ppsh", "svt40", "tokarev", "nagant", "kar98", "mp40", "stg44", "gewehr", "p38", "luger", "walther", "stielhandgranate"],
+        mg: ["mg34", "mg42", "m1919", "browning", "lewis", "dp27"],
+        armor: ["tiger", "panzer", "panther", "puma", "lux", "luchs", "marder", "sd.kfz", "stuart", "sherman", "is2", "t34", "75mm", "76mm", "88mm"],
+        rocket: ["bazooka", "panzerschreck", "piat", "panzerfaust"],
+        artillery: ["artillery", "155mm", "150mm", "105mm", "lefh", "howitzer", "spa 105", "sfh"],
+        satchel: ["satchel", "explosive charge"],
+        sniper:  ["kar98k 8x", "karabiner 98 k 8x", "springfield m1903a3", "mosin nagant m91/30 pu", "gewehr 43 zf4", "svt 40 pu", "enfield l42", "zf41", "zf 41", "scoped"]
+    };
+
+    async function fetchNoCache(url) {
+        return fetch(url + (url.includes("?") ? "&" : "?") + "t=" + Date.now(), { cache: "no-store" }).then(r => r.json());
+    }
+    async function getConfig() {
+        return fetch(CONFIG_URL).then(r => r.json());
+    }
+
+    function identifyTeam(p) {
+        const t = (p.team || "").toLowerCase();
+        if (t.includes("axis") || t.includes("ger")) return "Axis";
+        if (t.includes("allie") || t.includes("us") || t.includes("uk") || t.includes("soviet")) return "Allies";
+        return AXIS_SIGS.some(s => Object.keys(p.weapons || {}).join(" ").toLowerCase().includes(s)) ? "Axis" : "Allies";
+    }
+
+    // Weapons containing these are ALWAYS artillery — never armor/infantry
+    const ARTY_OVERRIDES = ["howitzer", "150mm", "105mm", "155mm", "152mm", "122mm", "lefh", "sfh", "artillery", "brumm", "stuh", "strumpanzer"];
+    // Keep armor crew detection aligned with tank scoreboard overlay.
+    const ARMOR_KEYWORDS = [
+        "panzer", "tiger", "panther", "sherman", "stuart",
+        "firefly", "puma", "lux", "marder", "halftrack", "greyhound",
+        "is-2", "is2", "t-34", "t34", "sd.kfz", "coaxial", "co-axial", "co axial", "coax", "kwk",
+        "75mm cannon", "75mm m3", "76mm m1", "88mm kwk",
+        "qf 75mm", "qf 6 pounder", "qf 2 pounder",
+        "17pdr", "17 pounder", "hull mg", "besa",
+        "m4a3", "m4a1", "m5a1", "m8a1"
+    ];
+    const AT_INFANTRY_KEYWORDS = [
+        "bazooka", "panzerschreck", "piat", "panzerfaust", "anti_tank", "m5 at"
+    ];
+    const INFANTRY_WEAPON_KEYWORDS = [
+        "kar98", "karabiner", "gewehr", "mp40", "stg44", "fg42",
+        "garand", "thompson", "carbine", "springfield", "m1911",
+        "grease", "sten", "enfield", "mosin", "ppsh", "svt40",
+        "tokarev", "nagant", "luger", "walther", "p38"
+    ];
+    const TANK_ROLE_KEYWORDS = ["tank", "armor", "armour", "crewman", "gunner", "driver"];
+    const SNIPER_SCOPE_SIGS = ["8x", "x8", "4x", "x4", "zf4", "zf 4", "zf41", "zf 41", "pu", "l42", "scope", "scoped", "sniper"];
+    const SNIPER_RIFLE_SIGS = ["kar98", "kar98k", "karabiner 98", "karabiner 98k", "m1903", "m1903 springfield", "springfield", "mosin", "gewehr 43", "svt 40", "enfield", "fg42"];
+    const ARTILLERY_KEYWORDS = [
+        "howitzer", "artillery", "lefh", "155mm", "152mm", "150mm", "122mm", "105mm", "sfh",
+        "m114", "m2a1", "mlrs", "katyusha", "pak 43",
+        "zis-3", "zis3", "brumm", "stuh", "strumpanzer", "kv-2", "m-10t", "sherman spa"
+    ];
+    const toNum = (v) => {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : 0;
+    };
+    const weaponKillValue = (raw) => {
+        if (typeof raw === "number" || typeof raw === "string") return toNum(raw);
+        if (raw && typeof raw === "object") {
+            return toNum(raw.kills ?? raw.kill ?? raw.count ?? raw.value ?? raw.total ?? 0);
+        }
+        return 0;
+    };
+    const getVehicleKills = (p) => toNum(p?.v_kills ?? p?.vehicle_kills ?? p?.vehicles_destroyed ?? 0);
+    const isATWeaponName = (nameLower) => AT_INFANTRY_KEYWORDS.some(k => nameLower.includes(k));
+    const isInfantryWeaponName = (nameLower) => INFANTRY_WEAPON_KEYWORDS.some(k => nameLower.includes(k));
+    const isArmorWeaponName = (nameLower) =>
+        ARMOR_KEYWORDS.some(k => nameLower.includes(k)) || CAT_MAP.armor.some(k => nameLower.includes(k));
+    const SNIPER_ZOOM_RE = /(^|[^a-z0-9])(x[2-9]|[2-9]x|10x)([^a-z0-9]|$)/;
+    const isSniperWeaponName = (nameLower) => {
+        const normalized = nameLower.replace(/\s+/g, " ").trim();
+        if (CAT_MAP.sniper.some(k => normalized.includes(k))) return true;
+        if (normalized.includes("m1903 springfield")) return true;
+        const hasScopeSig = SNIPER_SCOPE_SIGS.some(k => normalized.includes(k)) || SNIPER_ZOOM_RE.test(normalized);
+        const hasRifleSig = SNIPER_RIFLE_SIGS.some(k => normalized.includes(k));
+        return hasScopeSig && hasRifleSig;
+    };
+    const isSniperRole = (p) => {
+        const roleText = `${p?.role || ""} ${p?.class || ""} ${p?.loadout || ""} ${p?.unit || ""} ${p?.squad || ""}`.toLowerCase();
+        return roleText.includes("sniper") || roleText.includes("marksman");
+    };
+    const hasTankRole = (p) => {
+        const roleText = `${p?.role || ""} ${p?.class || ""} ${p?.loadout || ""} ${p?.unit || ""} ${p?.squad || ""}`.toLowerCase();
+        return TANK_ROLE_KEYWORDS.some(k => roleText.includes(k));
+    };
+    const getArmorWeaponKills = (p) => {
+        let total = 0;
+        Object.entries(p?.weapons || {}).forEach(([name, val]) => {
+            const nl = name.toLowerCase();
+            if (ARTY_OVERRIDES.some(k => nl.includes(k))) return;
+            if (isATWeaponName(nl)) return;
+            if (isInfantryWeaponName(nl)) return;
+            if (isArmorWeaponName(nl)) total += weaponKillValue(val);
+        });
+        return total;
+    };
+    function isArmorCrew(p) {
+        if (!p || typeof p !== "object") return false;
+        const weaponNames = Object.keys(p.weapons || {});
+        const wAll = weaponNames.join(" ").toLowerCase();
+        const vehicleKills = getVehicleKills(p);
+        if (!weaponNames.length) return vehicleKills > 0 && hasTankRole(p);
+        if (ARTILLERY_KEYWORDS.some(k => wAll.includes(k))) return false;
+        const hasArmorWeapon = weaponNames.some(w => {
+            const wl = w.toLowerCase();
+            if (isATWeaponName(wl)) return false;
+            if (isInfantryWeaponName(wl)) return false;
+            return isArmorWeaponName(wl);
+        });
+        const hasATWeapon = weaponNames.some(w => isATWeaponName(w.toLowerCase()));
+        if (hasATWeapon && !hasArmorWeapon) return false;
+        return hasArmorWeapon;
+    }
+
+    function getKills(players, cat) {
+        let count = 0;
+        players.forEach(p => {
+            const armorCrew = isArmorCrew(p);
+            // Armor: prefer crew kills from tank weapons, fallback to vehicle kills.
+            // This prevents the armor row showing 0/0 when v_kills is absent or inconsistent.
+            if (cat === 'armor') {
+                if (!armorCrew) return;
+                const tankWeaponKills = getArmorWeaponKills(p);
+                // Only count actual tank-weapon kills when weapon breakdown exists.
+                // This prevents panzerschreck/kar98 spillover into armor totals.
+                if (Object.keys(p.weapons || {}).length) {
+                    count += tankWeaponKills;
+                } else {
+                    count += getVehicleKills(p);
+                }
+                return;
+            }
+            if (!p.weapons) {
+                // No weapon data — if infantry, use full kills as fallback
+                if (cat === 'infantry') count += (p.kills || 0);
+                return;
+            }
+            // Tally kills per weapon into categories
+            let artyKills = 0, armorKills = 0, mgKills = 0, rocketKills = 0, sniperKills = 0, satchelKills = 0;
+            Object.entries(p.weapons).forEach(([n, v]) => {
+                const nl = n.toLowerCase();
+                const val = weaponKillValue(v);
+                const isArty = ARTY_OVERRIDES.some(k => nl.includes(k));
+                if (isArty) { artyKills += val; return; }
+                if (armorCrew && isArmorWeaponName(nl) && !isATWeaponName(nl)) { armorKills += val; return; }
+                if (CAT_MAP.mg.some(k => nl.includes(k)))      { mgKills += val; return; }
+                if (CAT_MAP.rocket.some(k => nl.includes(k)))  { rocketKills += val; return; }
+                if (isSniperWeaponName(nl))                     { sniperKills += val; return; }
+                if (CAT_MAP.satchel.some(k => nl.includes(k))) { satchelKills += val; return; }
+            });
+            const totalKills    = Number(p.kills || 0);
+            if (isSniperRole(p)) {
+                const alreadyClassified = artyKills + armorKills + mgKills + rocketKills + sniperKills + satchelKills;
+                const fallbackSniper = Math.max(0, totalKills - alreadyClassified);
+                sniperKills += fallbackSniper;
+            }
+            const otherCatKills = artyKills + armorKills + mgKills + rocketKills + sniperKills + satchelKills;
+            // Infantry = total kills minus kills from all other tracked categories.
+            // Armor kills are subtracted so hull/coaxial doesn't leak into infantry totals.
+            const infantryKills = Math.max(0, totalKills - otherCatKills);
+            if (cat === 'infantry')  { count += infantryKills; return; }
+            if (cat === 'artillery') { count += artyKills; return; }
+            if (cat === 'mg')        { count += mgKills; return; }
+            if (cat === 'rocket')    { count += rocketKills; return; }
+            if (cat === 'sniper')    { count += sniperKills; return; }
+            if (cat === 'satchel')   { count += satchelKills; return; }
+        });
+        return count;
+    }
+
+    let cachedConfig = { api_endpoint: "", swap_sides: false, allied_faction: "ALLIES" };
+    let lastSwap = null;
+    async function pollConfig() {
+        try {
+            const r = await fetch(CONFIG_URL + "?t=" + Date.now(), { cache: "no-store" });
+            if (!r.ok) throw new Error("config " + r.status);
+            const cfg = await r.json();
+            if (cfg && cfg.api_endpoint !== undefined) {
+                cachedConfig = cfg;
+                if (lastSwap !== null && lastSwap !== cfg.swap_sides) {
+                    update();
+                }
+                lastSwap = cfg.swap_sides;
+            }
+        } catch(e) {
+            console.warn("[HLL] pollConfig failed:", e.message);
+        }
+    }
+
+
+    function isArtyOrArmor(p) {
+        if (!p || typeof p !== "object") return false;
+        if (isArmorCrew(p)) return true;
+        const weaponNames = Object.keys(p.weapons || {});
+        if (!weaponNames.length) return false;
+        const wAll = weaponNames.join(" ").toLowerCase();
+        return ARTY_OVERRIDES.some(k => wAll.includes(k)) ||
+               ARTILLERY_KEYWORDS.some(k => wAll.includes(k));
+    }
+    async function update() {
+        try {
+            const settings = cachedConfig;
+            if (!settings.api_endpoint) { document.getElementById("status-text").innerText = "AWAITING API — CHECK HUB"; return; }
+            const data = await fetchNoCache(settings.api_endpoint);
+            const players = data?.result?.stats || [];
+            const swapped = settings.swap_sides;
+            const alliedName = settings.allied_faction || "ALLIES";
+            const axisName   = "GERMANY";
+
+            // DYNAMIC HEADER UPDATE WITH SPACING
+            const leftTeamName  = swapped ? axisName   : alliedName;
+            const rightTeamName = swapped ? alliedName : axisName;
+            document.getElementById("dynamic-header").innerHTML = `
+                <span class="team-label" style="color:var(--allies)">${leftTeamName}</span>
+                <span class="kd-label" style="color:var(--accent)">KILLDIFF</span>
+                <span class="team-label" style="color:var(--axis)">${rightTeamName}</span>
+            `;
+
+            // TOP 10 LIST - COLORING BASED ON SWAP TOGGLE
+            const top10 = players
+                .filter(p => !isArtyOrArmor(p))
+                .sort((a, b) => b.kills - a.kills).slice(0, 10);
+
+            let kHtml = "";
+            top10.forEach((p, i) => {
+                const team = identifyTeam(p);
+                let colorClass = "";
+                if (!swapped) {
+                    colorClass = (team === "Allies") ? "color-left" : "color-right";
+                } else {
+                    colorClass = (team === "Axis") ? "color-left" : "color-right";
+                }
+
+                kHtml += `
+                    <div class="k-row">
+                        <div class="k-rank">${i+1}</div>
+                        <div class="k-name ${colorClass}">${p.player}</div>
+                        <div class="stat-box"><div class="stat-val">${p.combat}</div><div class="stat-label">CBT</div></div>
+                        <div class="stat-box"><div class="stat-val">${p.kills}</div><div class="stat-label">K</div></div>
+                        <div class="stat-box"><div class="stat-val">${p.deaths}</div><div class="stat-label">D</div></div>
+                    </div>`;
+            });
+            document.getElementById("killers-list").innerHTML = kHtml;
+
+            // KILLDIFF BARS
+            const teams = { "Allies": [], "Axis": [] };
+            players.forEach(p => teams[identifyTeam(p)].push(p));
+
+            let tHtml = "";
+            const categories = ["infantry", "sniper", "mg", "armor", "rocket", "artillery", "satchel"];
+            let totalA = 0, totalX = 0;
+
+            categories.forEach(cat => {
+                const aVal = getKills(teams["Allies"], cat);
+                const xVal = getKills(teams["Axis"], cat);
+                totalA += aVal; totalX += xVal;
+                
+                const total = (aVal + xVal) || 1;
+                const aPct = (aVal / total) * 100;
+
+                const leftScore = swapped ? xVal : aVal;
+                const rightScore = swapped ? aVal : xVal;
+
+                tHtml += `
+                    <div class="s-row">
+                        <div class="s-info">
+                            <span class="s-val" style="color: var(--allies)">${leftScore}</span>
+                            <span class="s-label">${cat}</span>
+                            <span class="s-val" style="color: var(--axis)">${rightScore}</span>
+                        </div>
+                        <div class="bar-container">
+                            <div class="bar bar-left-blue" style="width:${swapped ? (100-aPct) : aPct}%"></div>
+                            <div class="bar bar-right-red" style="width:${swapped ? aPct : (100-aPct)}%"></div>
+                        </div>
+                    </div>`;
+            });
+
+            // Total Kills Row
+            const tLeftScore = swapped ? totalX : totalA;
+            const tRightScore = swapped ? totalA : totalX;
+            tHtml += `
+                <div class="s-row" style="margin-top:20px; border-top: 1px solid rgba(255,255,255,0.1); padding-top:10px;">
+                    <div class="s-info">
+                        <span class="s-val" style="color: var(--allies)">${tLeftScore}</span>
+                        <span class="s-label" style="color:var(--accent); font-weight:700;">TOTAL KILLS</span>
+                        <span class="s-val" style="color: var(--axis)">${tRightScore}</span>
+                    </div>
+                </div>`;
+
+            document.getElementById("teams-list").innerHTML = tHtml;
+            document.getElementById("status-text").innerText = `SIGNAL SECURE | SYNCED: ${players.length}`;
+
+        } catch (e) { document.getElementById("status-text").innerText = "SIGNAL LOST"; }
+    }
+    pollConfig().then(() => update());
+    setInterval(pollConfig, 1000);
+    setInterval(update, 4000);
+</script>
+</body>
+</html>
