@@ -1234,9 +1234,23 @@
         }
     }
 
+    let syncFailCount = 0;
+    const _origSyncAllUI = syncAllUI;
+    async function syncAllUIWithRetry() {
+        try {
+            await _origSyncAllUI();
+            syncFailCount = 0;
+        } catch(e) {
+            syncFailCount++;
+            if (syncFailCount >= 3) {
+                updateStatus('');
+            }
+        }
+    }
+
     // Sync all UI every 2 seconds on every device
-    syncAllUI();
-    setInterval(syncAllUI, 2000);
+    syncAllUIWithRetry();
+    setInterval(syncAllUIWithRetry, 2000);
     window.addEventListener('load', function() {
         document.addEventListener('click', function(e) {
             const box = document.getElementById('playerSuggestions');
