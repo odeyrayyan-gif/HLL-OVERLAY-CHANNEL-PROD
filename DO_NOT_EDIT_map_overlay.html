@@ -311,7 +311,7 @@
     async function update() {
         try {
             const settings = cachedConfig;
-            if (!settings.api_endpoint) { document.getElementById("status-text").innerText = "AWAITING API — CHECK HUB"; return; }
+            if (!settings.api_endpoint) { document.getElementById("status-text").innerText = "AWAITING API — CHECK HUB"; setTimeout(update, 1000); return; }
             const data = await fetchNoCache(settings.api_endpoint);
             const players = data?.result?.stats || [];
             const swapped = settings.swap_sides;
