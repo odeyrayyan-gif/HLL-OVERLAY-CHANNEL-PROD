@@ -355,17 +355,31 @@ class HLLHandler(SimpleHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
     def read_config(self):
-        try:
-            with open(CONFIG_FILE, "r") as f:
-                return json.load(f)
-        except:
-            return {"api_endpoint": "", "api_logs_endpoint": "", "swap_sides": False, "player": "", "allied_faction": "ALLIES", "ticker_messages": [], "saved_servers": [], "top5_freq": "indefinite", "top10_freq": "indefinite", "stat_mode": "combat", "banner_stat_mode": "combat"}
+        # Retry up to 3 times to handle race conditions during writes
+        for attempt in range(3):
+            try:
+                with open(CONFIG_FILE, "r") as f:
+                    content = f.read().strip()
+                if not content:
+                    import time; time.sleep(0.05)
+                    continue
+                data = json.loads(content)
+                # Only return if we got a valid config with expected fields
+                if isinstance(data, dict):
+                    return data
+            except (json.JSONDecodeError, IOError):
+                import time; time.sleep(0.05)
+        return {"api_endpoint": "", "api_logs_endpoint": "", "swap_sides": False, "player": "", "allied_faction": "ALLIES", "ticker_messages": [], "saved_servers": [], "top5_freq": "indefinite", "top10_freq": "indefinite", "stat_mode": "combat", "banner_stat_mode": "combat"}
 
     def write_config(self, data):
         existing = self.read_config()
         existing.update(data)
-        with open(CONFIG_FILE, "w") as f:
+        # Atomic write — write to temp file then rename to avoid partial reads
+        tmp = CONFIG_FILE + ".tmp"
+        with open(tmp, "w") as f:
             json.dump(existing, f, indent=2)
+        import os
+        os.replace(tmp, CONFIG_FILE)
 
     def read_player(self):
         try:
